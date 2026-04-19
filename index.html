@@ -4,54 +4,62 @@
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Practice - Final Text</title>
+    <title>Edge Practice - Reset Fix</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #bdbdbd; /* 淺灰色背景 */
+            background: #bdbdbd; 
             overflow: hidden; touch-action: none;
-            font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif;
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
         }
 
-        /* 1. 底層：畫布 */
-        #mainCanvas {
-            position: fixed; top: 0; left: 0; z-index: 1;
-        }
+        #mainCanvas { position: fixed; top: 0; left: 0; z-index: 1; }
 
-        /* 2. 中層：白色遮擋區（在畫布上方） */
         .white-box {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             width: 70vmin; height: 70vmin;
-            background: white; z-index: 5; /* 高於畫布，遮住線條 */
+            background: white; z-index: 5; 
             display: flex; align-items: center; justify-content: center;
-            pointer-events: none; /* 讓動作穿透到頂層觸控 */
+            pointer-events: none;
             box-shadow: 0 0 15px rgba(0,0,0,0.1);
         }
 
-        /* 提示文字樣式 */
         .hint { 
             color: #d0d0d0; 
             font-size: clamp(14px, 2.5vmin, 18px); 
             letter-spacing: 2px;
-            font-weight: 300;
             text-align: center;
         }
 
-        /* 3. 頂層：透明觸控層 */
         #touchLayer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 10; cursor: crosshair;
         }
 
+        /* 強化手機版按鈕的可見性與位置 */
         #resetBtn {
-            position: fixed; bottom: -80px; left: 50%;
-            transform: translateX(-50%); z-index: 100;
-            padding: 12px 24px; background: white; border: 1px solid #999;
-            border-radius: 4px; transition: 0.3s;
+            position: fixed; 
+            bottom: -100px; /* 初始隱藏位置 */
+            left: 50%;
+            transform: translateX(-50%); 
+            z-index: 100;
+            padding: 15px 40px; 
+            background: white; 
+            border: 1px solid #999;
+            border-radius: 50px; /* 改為圓角更適合手機點擊 */
+            font-size: 16px;
+            color: #333;
+            transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            -webkit-appearance: none;
         }
-        #resetBtn.show { bottom: 30px; }
+
+        /* 按鈕顯示時的位置，提高一點以避開手機底部的滑動條 */
+        #resetBtn.show { 
+            bottom: 50px; 
+        }
     </style>
 </head>
 <body>
@@ -78,7 +86,7 @@
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ctx.strokeStyle = '#000000'; // 黑色線條
+            ctx.strokeStyle = '#000000';
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -88,14 +96,10 @@
             const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
             const cx = window.innerWidth / 2;
             const cy = window.innerHeight / 2;
-            
             const rx = t.clientX;
             const ry = t.clientY;
-
             const dx = rx - cx;
             const dy = ry - cy;
-
-            // 保持位移比例，確保線條跳出白色區域
             const multiplier = 2.2; 
 
             return {
@@ -108,15 +112,26 @@
         function handleStart(e) {
             isDrawing = true;
             const p = getProjectedPos(e);
-            startY = p.rawY;
+            startY = p.rawY; // 記錄點擊初始位置
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
+            // 雖然隱藏按鈕，但若使用者再次點擊畫布，可以考慮讓按鈕消失
+            btn.classList.remove('show');
             if (e.cancelable) e.preventDefault();
         }
 
         function handleMove(e) {
             const p = getProjectedPos(e);
-            if (!isDrawing && p.rawY - startY > 80) btn.classList.add('show');
+
+            // 手勢判斷優化：
+            // 當手指不是在畫圖，且垂直滑動距離超過 50 像素時，觸發按鈕
+            if (!isDrawing) {
+                const moveDist = p.rawY - startY;
+                if (moveDist > 50) {
+                    btn.classList.add('show');
+                }
+            }
+
             if (!isDrawing) return;
 
             ctx.lineTo(p.x, p.y);
@@ -124,12 +139,15 @@
             if (e.cancelable) e.preventDefault();
         }
 
-        function handleEnd() { isDrawing = false; }
+        function handleEnd() { 
+            isDrawing = false; 
+        }
 
         touchLayer.addEventListener('touchstart', handleStart, { passive: false });
         touchLayer.addEventListener('touchmove', handleMove, { passive: false });
         window.addEventListener('touchend', handleEnd);
 
+        // 電腦版兼容
         touchLayer.addEventListener('mousedown', handleStart);
         window.addEventListener('mousemove', handleMove);
         window.addEventListener('mouseup', handleEnd);
