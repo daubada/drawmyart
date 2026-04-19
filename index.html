@@ -4,38 +4,42 @@
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Art - Final Fix</title>
+    <title>Edge Art - Black Line Final</title>
     <style>
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #d0d0d0; /* 淺灰色 */
+            background: #d0d0d0 !important; /* 強制淺灰色底 */
             overflow: hidden; touch-action: none; 
             font-family: sans-serif;
         }
         
-        #c { position: fixed; top: 0; left: 0; z-index: 1; }
+        /* 畫布層 */
+        #c { position: fixed; top: 0; left: 0; z-index: 5; pointer-events: none; }
 
+        /* 白色方塊層 */
         .box {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 75vmin; height: 75vmin; background: white; z-index: 5;
-            pointer-events: none; display: flex; align-items: center; justify-content: center;
+            width: 75vmin; height: 75vmin; background: white; z-index: 1;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
 
-        .hint { color: #aaa; font-size: 14px; letter-spacing: 2px; }
+        .hint { color: #ccc; font-size: 14px; letter-spacing: 2px; }
 
-        #touch { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
+        /* 頂層觸控層：最關鍵，確保能抓到動作 */
+        #touch { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: crosshair; }
 
         #resetBtn {
-            position: fixed; bottom: -80px; left: 50%; transform: translateX(-50%);
-            z-index: 100; padding: 12px 24px; background: white; border: 1px solid #999;
-            border-radius: 4px; transition: 0.3s;
+            position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%);
+            z-index: 100; padding: 15px 30px; background: white; border: 1px solid #ddd;
+            border-radius: 5px; transition: 0.4s;
         }
-        #resetBtn.show { bottom: 30px; }
+        #resetBtn.show { bottom: 40px; }
     </style>
 </head>
 <body>
-    <canvas id="c"></canvas>
     <div class="box"><span class="hint">在此繪製痕跡</span></div>
+    <canvas id="c"></canvas>
     <div id="touch"></div>
     <button id="resetBtn" onclick="location.reload(true)">RESET</button>
 
@@ -51,26 +55,24 @@
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ctx.strokeStyle = '#000000'; // 黑色線條
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#000000'; // 強制黑色
+            ctx.lineWidth = 2.5; // 加粗一點確保看得到
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
+            ctx.globalCompositeOperation = 'source-over';
         }
 
         function getOffsetPos(e) {
-            const r = e.touches ? e.touches[0] : e;
+            // 修正手機與電腦座標獲取
+            const r = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
             const cx = window.innerWidth / 2;
             const cy = window.innerHeight / 2;
             
-            // 計算手指距離中心的物理距離
+            // 計算位移：手指在白區，線條在灰區
             const dx = r.clientX - cx;
             const dy = r.clientY - cy;
-
-            // 位移邏輯修正：將座標往邊緣推移，但不超過螢幕邊界
-            // 我們把線條位置設定在：手指座標 + (向外的偏移量)
-            // 這樣不管你在中間哪裡畫，線條都會被「擠」出白框
-            const pushX = dx > 0 ? 100 : -100;
-            const pushY = dy > 0 ? 100 : -100;
+            const pushX = dx > 0 ? 120 : -120;
+            const pushY = dy > 0 ? 120 : -120;
 
             return { x: r.clientX + pushX, y: r.clientY + pushY, rawY: r.clientY };
         }
@@ -81,25 +83,38 @@
             lastY = p.rawY;
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
-            if(e.cancelable) e.preventDefault();
+            // 阻止手機瀏覽器預設行為
+            if (e.cancelable) e.preventDefault();
         }
 
         function move(e) {
             const p = getOffsetPos(e);
             // 偵測下滑出現按鈕
-            if (!drawing && p.rawY - lastY > 60) btn.classList.add('show');
+            if (!drawing && p.rawY - lastY > 80) btn.classList.add('show');
             
             if (!drawing) return;
             
             ctx.lineTo(p.x, p.y);
-            ctx.stroke();
-            if(e.cancelable) e.preventDefault();
+            ctx.stroke(); // 每一格移動都畫出來
+            if (e.cancelable) e.preventDefault();
         }
 
+        function stop() {
+            drawing = false;
+            ctx.closePath();
+        }
+
+        // 綁定事件
         touchLayer.addEventListener('touchstart', start, {passive:false});
         touchLayer.addEventListener('touchmove', move, {passive:false});
-        window.addEventListener('touchend', () => drawing = false);
+        touchLayer.addEventListener('touchend', stop);
 
         touchLayer.addEventListener('mousedown', start);
         window.addEventListener('mousemove', move);
-        window.addEventListener('
+        window.addEventListener('mouseup', stop);
+
+        window.addEventListener('resize', init);
+        init();
+    </script>
+</body>
+</html>
