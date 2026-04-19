@@ -3,138 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Art</title>
+    <title>Edge Test RED</title>
     <style>
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background-color: #333; /* 灰底 */
-            overflow: hidden; touch-action: none;
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #444; overflow: hidden; touch-action: none; }
+        
+        /* 1. 最底層：畫布 */
+        #c { position: fixed; top: 0; left: 0; z-index: 1; }
+
+        /* 2. 中間層：白色方塊 */
+        .box {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 60vmin; height: 60vmin; background: white; z-index: 5;
+            pointer-events: none; box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        /* 繪圖畫布：放在最下面 */
-        #mainCanvas {
-            position: fixed; top: 0; left: 0; z-index: 1;
-        }
+        /* 3. 最頂層：透明觸控層 (確保一定點得到) */
+        #touch { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
 
-        /* 白色畫布：蓋在中間 */
-        .white-box {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80vmin; height: 80vmin;
-            background-color: white;
-            z-index: 2; /* 蓋住畫布中間 */
-            pointer-events: none; /* 讓手指可以穿透它，點到後面的底層 */
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        button {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 100; padding: 10px 20px;
         }
-
-        /* 隱形觸控層：最頂層，確保所有瀏覽器都能抓到動作 */
-        #touchLayer {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10; cursor: crosshair;
-        }
-
-        #resetBtn {
-            position: fixed; bottom: -80px; left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
-            padding: 15px 40px;
-            background: #fff; border: none; border-radius: 50px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-            transition: 0.3s;
-        }
-        #resetBtn.show { bottom: 40px; }
     </style>
 </head>
 <body>
-
-    <canvas id="mainCanvas"></canvas>
-    <div class="white-box"></div>
-    <div id="touchLayer"></div> <button id="resetBtn" onclick="location.reload()">重新開始 / RESET</button>
+    <canvas id="c"></canvas>
+    <div class="box"></div>
+    <div id="touch"></div>
+    <button onclick="location.reload()">重新整理 (RESET)</button>
 
     <script>
-        const canvas = document.getElementById('mainCanvas');
+        const canvas = document.getElementById('c');
         const ctx = canvas.getContext('2d');
-        const touchLayer = document.getElementById('touchLayer');
-        const btn = document.getElementById('resetBtn');
-
-        let isDrawing = false;
-        let startY = 0;
+        const touch = document.getElementById('touch');
+        let drawing = false;
 
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'red'; // 改用紅色，確保你看得到線條！
+            ctx.lineWidth = 3;
             ctx.lineCap = 'round';
         }
 
-        function getPos(e) {
-            const t = e.touches ? e.touches[0] : e;
-            return { x: t.clientX, y: t.clientY };
+        function getXY(e) {
+            const r = e.touches ? e.touches[0] : e;
+            return { x: r.clientX, y: r.clientY };
         }
 
-        // 開始畫畫
-        touchLayer.addEventListener('touchstart', (e) => {
-            isDrawing = true;
-            const pos = getPos(e);
-            startY = pos.y;
-            const p = project(pos.x, pos.y);
+        function start(e) {
+            drawing = true;
+            const p = getXY(e);
+            // 強制讓起點位移到旁邊
             ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            e.preventDefault();
-        }, {passive: false});
-
-        // 移動中
-        touchLayer.addEventListener('touchmove', (e) => {
-            const pos = getPos(e);
-            
-            // 下滑顯現按鈕邏輯
-            if (!isDrawing && pos.y - startY > 60) btn.classList.add('show');
-
-            if (!isDrawing) return;
-
-            const p = project(pos.x, pos.y);
-            ctx.lineTo(p.x, p.y);
-            ctx.stroke();
-            e.preventDefault();
-        }, {passive: false});
-
-        // 結束
-        window.addEventListener('touchend', () => { isDrawing = false; });
-
-        // 電腦版支援
-        touchLayer.addEventListener('mousedown', (e) => {
-            isDrawing = true;
-            const pos = getPos(e);
-            const p = project(pos.x, pos.y);
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-        });
-        window.addEventListener('mousemove', (e) => {
-            if (!isDrawing) return;
-            const pos = getPos(e);
-            const p = project(pos.x, pos.y);
-            ctx.lineTo(p.x, p.y);
-            ctx.stroke();
-        });
-        window.addEventListener('mouseup', () => { isDrawing = false; });
-
-        // 核心：投影函數
-        // 把你的座標，往螢幕邊緣推開 200 像素，確保它一定在白框外
-        function project(x, y) {
-            const cx = window.innerWidth / 2;
-            const cy = window.innerHeight / 2;
-            const dx = x - cx;
-            const dy = y - cy;
-            
-            // 只要你在動，線條就會出現在距離你手指 200 像素以外的地方
-            return {
-                x: x + (dx > 0 ? 150 : -150),
-                y: y + (dy > 0 ? 150 : -150)
-            };
+            ctx.moveTo(p.x + 150, p.y + 150); 
+            if(e.touches) e.preventDefault();
         }
+
+        function move(e) {
+            if (!drawing) return;
+            const p = getXY(e);
+            // 讓線條永遠距離手指 150 像素
+            ctx.lineTo(p.x + 150, p.y + 150);
+            ctx.stroke();
+            if(e.touches) e.preventDefault();
+        }
+
+        touch.addEventListener('touchstart', start, {passive:false});
+        touch.addEventListener('touchmove', move, {passive:false});
+        window.addEventListener('touchend', () => drawing = false);
+
+        touch.addEventListener('mousedown', start);
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', () => drawing = false);
 
         window.addEventListener('resize', init);
         init();
