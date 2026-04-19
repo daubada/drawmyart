@@ -4,34 +4,42 @@
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Practice - Reflection</title>
+    <title>Edge Practice - Final Text</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
             background: #bdbdbd; /* 淺灰色背景 */
             overflow: hidden; touch-action: none;
+            font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif;
         }
 
-        /* 底層：畫布，僅顯示在邊緣的線條 */
+        /* 1. 底層：畫布 */
         #mainCanvas {
             position: fixed; top: 0; left: 0; z-index: 1;
         }
 
-        /* 中層：實心白色畫布，遮擋所有內側線條 */
+        /* 2. 中層：白色遮擋區（在畫布上方） */
         .white-box {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             width: 70vmin; height: 70vmin;
-            background: white; z-index: 5;
+            background: white; z-index: 5; /* 高於畫布，遮住線條 */
             display: flex; align-items: center; justify-content: center;
-            pointer-events: none;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            pointer-events: none; /* 讓動作穿透到頂層觸控 */
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
         }
 
-        .hint { color: #d0d0d0; font-size: 14px; letter-spacing: 2px; }
+        /* 提示文字樣式 */
+        .hint { 
+            color: #d0d0d0; 
+            font-size: clamp(14px, 2.5vmin, 18px); 
+            letter-spacing: 2px;
+            font-weight: 300;
+            text-align: center;
+        }
 
-        /* 頂層：透明觸控層 */
+        /* 3. 頂層：透明觸控層 */
         #touchLayer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 10; cursor: crosshair;
@@ -51,7 +59,7 @@
     <canvas id="mainCanvas"></canvas>
     
     <div class="white-box">
-        <span class="hint">在此繪製痕跡</span>
+        <span class="hint">在這個白色畫布上畫畫</span>
     </div>
 
     <div id="touchLayer"></div>
@@ -81,18 +89,13 @@
             const cx = window.innerWidth / 2;
             const cy = window.innerHeight / 2;
             
-            // 手指原始座標
             const rx = t.clientX;
             const ry = t.clientY;
 
-            // 計算手指距離中心的距離
             const dx = rx - cx;
             const dy = ry - cy;
 
-            /* 核心位移算法：
-               我們將位移大幅度拉開。如果手指在中間移動 1 單位，
-               邊緣的線條會移動 2 單位以上，確保它跳出白色區域。
-            */
+            // 保持位移比例，確保線條跳出白色區域
             const multiplier = 2.2; 
 
             return {
@@ -113,10 +116,7 @@
 
         function handleMove(e) {
             const p = getProjectedPos(e);
-
-            // 下滑顯現按鈕偵測
             if (!isDrawing && p.rawY - startY > 80) btn.classList.add('show');
-
             if (!isDrawing) return;
 
             ctx.lineTo(p.x, p.y);
