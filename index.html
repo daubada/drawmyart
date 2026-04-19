@@ -4,18 +4,20 @@
     <meta charset="UTF-8">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Practice - Reset Fix</title>
+    <title>Edge Art - Simple</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body, html { 
             margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #bdbdbd; 
+            background: #bdbdbd; /* 淺灰色背景 */
             overflow: hidden; touch-action: none;
-            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            font-family: sans-serif;
         }
 
+        /* 1. 底層：畫布 */
         #mainCanvas { position: fixed; top: 0; left: 0; z-index: 1; }
 
+        /* 2. 中層：白色遮擋區 */
         .white-box {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
@@ -23,42 +25,31 @@
             background: white; z-index: 5; 
             display: flex; align-items: center; justify-content: center;
             pointer-events: none;
-            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
 
-        .hint { 
-            color: #d0d0d0; 
-            font-size: clamp(14px, 2.5vmin, 18px); 
-            letter-spacing: 2px;
-            text-align: center;
-        }
+        .hint { color: #d0d0d0; font-size: 14px; text-align: center; }
 
+        /* 3. 頂層：透明觸控層 */
         #touchLayer {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 10; cursor: crosshair;
         }
 
-        /* 強化手機版按鈕的可見性與位置 */
+        /* 固定在底部的小按鈕 */
         #resetBtn {
             position: fixed; 
-            bottom: -100px; /* 初始隱藏位置 */
+            bottom: 20px; 
             left: 50%;
             transform: translateX(-50%); 
             z-index: 100;
-            padding: 15px 40px; 
-            background: white; 
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.8);
             border: 1px solid #999;
-            border-radius: 50px; /* 改為圓角更適合手機點擊 */
-            font-size: 16px;
-            color: #333;
-            transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            -webkit-appearance: none;
-        }
-
-        /* 按鈕顯示時的位置，提高一點以避開手機底部的滑動條 */
-        #resetBtn.show { 
-            bottom: 50px; 
+            color: #666;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -72,21 +63,19 @@
 
     <div id="touchLayer"></div>
 
-    <button id="resetBtn" onclick="location.reload(true)">RESET</button>
+    <button id="resetBtn" onclick="location.reload(true)">重置畫布 RESET</button>
 
     <script>
         const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d');
         const touchLayer = document.getElementById('touchLayer');
-        const btn = document.getElementById('resetBtn');
 
         let isDrawing = false;
-        let startY = 0;
 
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ctx.strokeStyle = '#000000';
+            ctx.strokeStyle = '#000000'; // 黑色筆劃
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -96,58 +85,41 @@
             const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
             const cx = window.innerWidth / 2;
             const cy = window.innerHeight / 2;
-            const rx = t.clientX;
-            const ry = t.clientY;
-            const dx = rx - cx;
-            const dy = ry - cy;
+            
+            // 計算手指距離中心的偏移，並放大 2.2 倍投射到邊緣
+            const dx = t.clientX - cx;
+            const dy = t.clientY - cy;
             const multiplier = 2.2; 
 
             return {
                 x: cx + (dx * multiplier),
-                y: cy + (dy * multiplier),
-                rawY: t.clientY
+                y: cy + (dy * multiplier)
             };
         }
 
         function handleStart(e) {
             isDrawing = true;
             const p = getProjectedPos(e);
-            startY = p.rawY; // 記錄點擊初始位置
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
-            // 雖然隱藏按鈕，但若使用者再次點擊畫布，可以考慮讓按鈕消失
-            btn.classList.remove('show');
             if (e.cancelable) e.preventDefault();
         }
 
         function handleMove(e) {
-            const p = getProjectedPos(e);
-
-            // 手勢判斷優化：
-            // 當手指不是在畫圖，且垂直滑動距離超過 50 像素時，觸發按鈕
-            if (!isDrawing) {
-                const moveDist = p.rawY - startY;
-                if (moveDist > 50) {
-                    btn.classList.add('show');
-                }
-            }
-
             if (!isDrawing) return;
-
+            const p = getProjectedPos(e);
             ctx.lineTo(p.x, p.y);
             ctx.stroke();
             if (e.cancelable) e.preventDefault();
         }
 
-        function handleEnd() { 
-            isDrawing = false; 
-        }
+        function handleEnd() { isDrawing = false; }
 
+        // 事件監聽
         touchLayer.addEventListener('touchstart', handleStart, { passive: false });
         touchLayer.addEventListener('touchmove', handleMove, { passive: false });
         window.addEventListener('touchend', handleEnd);
 
-        // 電腦版兼容
         touchLayer.addEventListener('mousedown', handleStart);
         window.addEventListener('mousemove', handleMove);
         window.addEventListener('mouseup', handleEnd);
