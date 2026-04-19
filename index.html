@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Drawing - 邊緣練習</title>
+    <title>Offset Drawing - 偏移練習</title>
     <style>
-        /* 基礎設定：禁止頁面縮放與預設滾動 */
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow-x: hidden;
-            background-color: #333; /* 背景深灰 */
-            font-family: sans-serif;
+            background-color: #222; /* 更深的深灰 */
+            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
+            overflow: hidden; /* 禁止整體滾動，我們改用手勢偵測 */
         }
 
-        /* 背景畫布：填滿整個螢幕 */
+        /* 背景畫布 */
         #bgCanvas {
             position: fixed;
             top: 0;
@@ -25,60 +24,62 @@
             display: block;
         }
 
-        /* 內容容器：用來創造「往下滑」的空間 */
-        .scroll-container {
+        /* 主容器 */
+        .main-container {
             position: relative;
             z-index: 2;
-            height: 150vh; /* 讓頁面比螢幕高，才能產生滑動感 */
-        }
-
-        /* 中央白色畫布感應區 */
-        .drawing-zone {
-            position: sticky;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 70vw;
-            height: 70vw;
-            background-color: white;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            pointer-events: auto; /* 確保能接收觸摸 */
-        }
-
-        /* 提示文字 */
-        .hint {
-            color: #999;
-            font-size: 0.8rem;
-            pointer-events: none;
-        }
-
-        /* 底部控制區 */
-        .controls {
-            position: absolute;
-            bottom: 0;
             width: 100%;
-            height: 50vh;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(transparent, #222);
         }
 
-        button {
-            padding: 15px 40px;
-            font-size: 1.1rem;
-            background: #fff;
+        /* 中央白色畫布感應區：縮小灰邊，擴大白區 */
+        .drawing-zone {
+            /* 調整這裡來控制灰邊的寬度。
+               使用 90vmin 代表佔據螢幕短邊的 90%，
+               剩下的 10% 就是灰邊（左右各 5%） */
+            width: 90vmin; 
+            height: 90vmin;
+            background-color: white;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none; 
+            cursor: crosshair;
+        }
+
+        .hint {
+            color: #d1d1d1;
+            font-size: 0.8rem;
+            letter-spacing: 3px;
+            pointer-events: none;
+            user-select: none;
+            mix-blend-mode: difference; /* 讓文字在線條穿過時仍可見 */
+        }
+
+        /* 重新開始按鈕：平常隱藏，下滑手勢時出現 */
+        #resetBtn {
+            position: fixed;
+            bottom: -80px; /* 平常藏在下方 */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
             border: none;
             border-radius: 50px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: bottom 0.3s ease-out; /* 出現動畫 */
         }
 
-        button:active {
-            transform: scale(0.95);
+        #resetBtn.show {
+            bottom: 40px; /* 出現時的位置 */
         }
     </style>
 </head>
@@ -86,84 +87,88 @@
 
     <canvas id="bgCanvas"></canvas>
 
-    <div class="scroll-container">
+    <div class="main-container">
         <div class="drawing-zone" id="touchZone">
-            <span class="hint">請在此處作畫</span>
-        </div>
-
-        <div class="controls">
-            <button onclick="resetCanvas()">重新開始</button>
+            <span class="hint">DRAW WITHIN</span>
         </div>
     </div>
+
+    <button id="resetBtn" onclick="resetCanvas()">重新開始 / RESET</button>
 
     <script>
         const canvas = document.getElementById('bgCanvas');
         const ctx = canvas.getContext('2d');
         const touchZone = document.getElementById('touchZone');
+        const resetBtn = document.getElementById('resetBtn');
 
         let isDrawing = false;
+        let centerX, centerY;
+        let startY; // 用於偵測下滑手勢
 
-        // 初始化畫布大小
+        // 初始化
         function initCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            ctx.strokeStyle = '#ffffff'; // 線條顏色為白色，在灰底上顯眼
-            ctx.lineWidth = 2;
+            const ratio = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * ratio;
+            canvas.height = window.innerHeight * ratio;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            
+            ctx.scale(ratio, ratio);
+            ctx.strokeStyle = '#ffffff'; // 線條為白色
+            ctx.lineWidth = 1;
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
+
+            // 重新計算螢幕中心點
+            centerX = window.innerWidth / 2;
+            centerY = window.innerHeight / 2;
         }
 
-        // 取得座標並繪製
-        function getPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            // 處理手機觸控或滑鼠
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        // 偏移繪製核心邏輯
+        function getOffsetPos(e) {
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            // 1. 計算手指距離中心的距離
+            const deltaX = clientX - centerX;
+            const deltaY = clientY - centerY;
+
+            // 2. 將距離反轉 (Mirror effect)，決定線條位置
+            // 如果你想線條在同側出現但偏移，把這裡的 "-" 去掉即可
             return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
+                x: centerX - deltaX,
+                y: centerY - deltaY
             };
         }
 
         function startDrawing(e) {
             isDrawing = true;
-            const pos = getPos(e);
+            const pos = getOffsetPos(e);
             ctx.beginPath();
             ctx.moveTo(pos.x, pos.y);
-            // 阻止預設的滾動行為，讓作畫時頁面不動
-            if(e.touches) e.preventDefault();
+            
+            // 用於偵測是否要往下滑
+            if (e.touches) startY = e.touches[0].clientY; 
         }
 
         function draw(e) {
+            // 處理重新開始按鈕的顯示/隱藏
+            if (e.touches) {
+                const currentY = e.touches[0].clientY;
+                // 如果在作畫區域外往下滑動，且未在作畫，顯示按鈕
+                if (!isDrawing && currentY - startY > 50) { 
+                    resetBtn.classList.add('show');
+                }
+            }
+
             if (!isDrawing) return;
-            const pos = getPos(e);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            if(e.touches) e.preventDefault();
-        }
+            if (e.cancelable) e.preventDefault(); 
 
-        function stopDrawing() {
-            isDrawing = false;
-        }
-
-        function resetCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // 回到頂部
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // 事件監聽：只在 touchZone (白色框) 上開始偵測
-        touchZone.addEventListener('touchstart', startDrawing, { passive: false });
-        window.addEventListener('touchmove', draw, { passive: false });
-        window.addEventListener('touchend', stopDrawing);
-
-        // 同時支援滑鼠（方便你在電腦測試）
-        touchZone.addEventListener('mousedown', startDrawing);
-        window.addEventListener('mousemove', draw);
-        window.addEventListener('mouseup', stopDrawing);
-
-        window.addEventListener('resize', initCanvas);
-        initCanvas();
-    </script>
-</body>
-</html>
+            // 限制只有在白色區域內觸摸才會有線條
+            const target
