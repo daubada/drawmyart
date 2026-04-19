@@ -3,70 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Practice</title>
+    <title>Edge Art</title>
     <style>
-        body, html {
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-            background-color: #2a2a2a; /* 灰底 */
-            overflow: hidden;
-            touch-action: none;
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            background-color: #333; /* 灰底 */
+            overflow: hidden; touch-action: none;
         }
 
-        /* 中間的白色畫布（純視覺遮蓋） */
-        .white-center {
+        /* 繪圖畫布：放在最下面 */
+        #mainCanvas {
+            position: fixed; top: 0; left: 0; z-index: 1;
+        }
+
+        /* 白色畫布：蓋在中間 */
+        .white-box {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             width: 80vmin; height: 80vmin;
             background-color: white;
-            z-index: 5; /* 擋住底下的線條 */
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            pointer-events: none; /* 讓觸摸穿透到畫布 */
+            z-index: 2; /* 蓋住畫布中間 */
+            pointer-events: none; /* 讓手指可以穿透它，點到後面的底層 */
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
         }
 
-        /* 畫布放在遮罩下面 */
-        #mainCanvas {
-            position: fixed;
-            top: 0; left: 0;
-            z-index: 2;
-            background-color: transparent;
+        /* 隱形觸控層：最頂層，確保所有瀏覽器都能抓到動作 */
+        #touchLayer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10; cursor: crosshair;
         }
 
         #resetBtn {
-            position: fixed;
-            bottom: -80px; left: 50%;
+            position: fixed; bottom: -80px; left: 50%;
             transform: translateX(-50%);
             z-index: 100;
-            padding: 15px 30px;
-            background: white;
-            border: 1px solid #ccc;
+            padding: 15px 40px;
+            background: #fff; border: none; border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
             transition: 0.3s;
-            cursor: pointer;
         }
-
         #resetBtn.show { bottom: 40px; }
     </style>
 </head>
 <body>
 
-    <div class="white-center"></div>
     <canvas id="mainCanvas"></canvas>
-    <button id="resetBtn" onclick="resetCanvas()">RESET / 重新開始</button>
+    <div class="white-box"></div>
+    <div id="touchLayer"></div> <button id="resetBtn" onclick="location.reload()">重新開始 / RESET</button>
 
     <script>
         const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d');
+        const touchLayer = document.getElementById('touchLayer');
         const btn = document.getElementById('resetBtn');
 
-        let drawing = false;
+        let isDrawing = false;
         let startY = 0;
 
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
             ctx.lineCap = 'round';
         }
 
@@ -75,28 +75,69 @@
             return { x: t.clientX, y: t.clientY };
         }
 
-        function start(e) {
-            drawing = true;
+        // 開始畫畫
+        touchLayer.addEventListener('touchstart', (e) => {
+            isDrawing = true;
             const pos = getPos(e);
             startY = pos.y;
-            // 每次下筆，畫布的四個角落同步準備
+            const p = project(pos.x, pos.y);
             ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            e.preventDefault();
+        }, {passive: false});
+
+        // 移動中
+        touchLayer.addEventListener('touchmove', (e) => {
+            const pos = getPos(e);
+            
+            // 下滑顯現按鈕邏輯
+            if (!isDrawing && pos.y - startY > 60) btn.classList.add('show');
+
+            if (!isDrawing) return;
+
+            const p = project(pos.x, pos.y);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+            e.preventDefault();
+        }, {passive: false});
+
+        // 結束
+        window.addEventListener('touchend', () => { isDrawing = false; });
+
+        // 電腦版支援
+        touchLayer.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const pos = getPos(e);
+            const p = project(pos.x, pos.y);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const pos = getPos(e);
+            const p = project(pos.x, pos.y);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+        });
+        window.addEventListener('mouseup', () => { isDrawing = false; });
+
+        // 核心：投影函數
+        // 把你的座標，往螢幕邊緣推開 200 像素，確保它一定在白框外
+        function project(x, y) {
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            const dx = x - cx;
+            const dy = y - cy;
+            
+            // 只要你在動，線條就會出現在距離你手指 200 像素以外的地方
+            return {
+                x: x + (dx > 0 ? 150 : -150),
+                y: y + (dy > 0 ? 150 : -150)
+            };
         }
 
-        function move(e) {
-            const pos = getPos(e);
-
-            // 往下滑偵測
-            if (!drawing && pos.y - startY > 60) {
-                btn.classList.add('show');
-            }
-
-            if (!drawing) return;
-            if (e.cancelable) e.preventDefault();
-
-            // 核心邏輯：位移投影
-            // 我們把目前的座標 (x, y)，同時投影到螢幕的四個邊緣方向
-            const offset = 120; // 偏移量，確保線條被推到白框外面
-            
-            // 這裡我們畫四條線，分別往上下左右偏移
-            // 這樣不管你在中間怎麼畫，線條
+        window.addEventListener('resize', init);
+        init();
+    </script>
+</body>
+</html>
