@@ -3,172 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Offset Drawing - 偏移練習</title>
+    <title>Edge Only Drawing</title>
     <style>
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            background-color: #222; /* 更深的深灰 */
-            font-family: "PingFang TC", "Microsoft JhengHei", sans-serif;
-            overflow: hidden; /* 禁止整體滾動，我們改用手勢偵測 */
+            background-color: #1a1a1a; /* 深灰背景 */
+            overflow: hidden;
+            touch-action: none;
         }
 
-        /* 背景畫布 */
+        /* 畫布：放在最底層 */
         #bgCanvas {
             position: fixed;
             top: 0;
             left: 0;
             z-index: 1;
-            display: block;
         }
 
-        /* 主容器 */
-        .main-container {
-            position: relative;
-            z-index: 2;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* 中央白色畫布感應區：縮小灰邊，擴大白區 */
-        .drawing-zone {
-            /* 調整這裡來控制灰邊的寬度。
-               使用 90vmin 代表佔據螢幕短邊的 90%，
-               剩下的 10% 就是灰邊（左右各 5%） */
-            width: 90vmin; 
-            height: 90vmin;
+        /* 白色畫布：放在畫布上方，遮住中間的線條 */
+        .white-plate {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 85vmin; /* 稍微縮小一點點，讓灰邊明顯一點 */
+            height: 85vmin;
             background-color: white;
-            box-shadow: 0 0 40px rgba(0,0,0,0.8);
-            
+            z-index: 5; /* 確保在線條上方 */
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
-            touch-action: none; 
-            cursor: crosshair;
         }
 
         .hint {
-            color: #d1d1d1;
-            font-size: 0.8rem;
-            letter-spacing: 3px;
+            color: #eee;
+            font-size: 0.7rem;
+            letter-spacing: 5px;
             pointer-events: none;
-            user-select: none;
-            mix-blend-mode: difference; /* 讓文字在線條穿過時仍可見 */
         }
 
-        /* 重新開始按鈕：平常隱藏，下滑手勢時出現 */
+        /* 按鈕區 */
         #resetBtn {
             position: fixed;
-            bottom: -80px; /* 平常藏在下方 */
+            bottom: -100px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
-            padding: 15px 30px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
+            padding: 12px 24px;
+            background: white;
             border: none;
-            border-radius: 50px;
-            font-size: 1rem;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            transition: bottom 0.3s ease-out; /* 出現動畫 */
+            border-radius: 2px;
+            transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
-        #resetBtn.show {
-            bottom: 40px; /* 出現時的位置 */
+        #resetBtn.active {
+            bottom: 40px;
         }
     </style>
 </head>
 <body>
 
     <canvas id="bgCanvas"></canvas>
-
-    <div class="main-container">
-        <div class="drawing-zone" id="touchZone">
-            <span class="hint">DRAW WITHIN</span>
+    
+    <div class="white-plate" id="touchArea">
         </div>
-    </div>
 
-    <button id="resetBtn" onclick="resetCanvas()">重新開始 / RESET</button>
+    <button id="resetBtn" onclick="clearAll()">RESET</button>
 
     <script>
         const canvas = document.getElementById('bgCanvas');
         const ctx = canvas.getContext('2d');
-        const touchZone = document.getElementById('touchZone');
-        const resetBtn = document.getElementById('resetBtn');
+        const touchArea = document.getElementById('touchArea');
+        const btn = document.getElementById('resetBtn');
 
-        let isDrawing = false;
-        let centerX, centerY;
-        let startY; // 用於偵測下滑手勢
+        let drawing = false;
+        let lastY = 0;
 
-        // 初始化
-        function initCanvas() {
-            const ratio = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * ratio;
-            canvas.height = window.innerHeight * ratio;
-            canvas.style.width = window.innerWidth + 'px';
-            canvas.style.height = window.innerHeight + 'px';
-            
-            ctx.scale(ratio, ratio);
-            ctx.strokeStyle = '#ffffff'; // 線條為白色
-            ctx.lineWidth = 1;
-            ctx.lineJoin = 'round';
+        function init() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
             ctx.lineCap = 'round';
-
-            // 重新計算螢幕中心點
-            centerX = window.innerWidth / 2;
-            centerY = window.innerHeight / 2;
         }
 
-        // 偏移繪製核心邏輯
-        function getOffsetPos(e) {
-            let clientX, clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
+        function handleStart(e) {
+            drawing = true;
+            const pos = getPos(e);
+            lastY = pos.rawY;
+            // 計算偏移：將座標往外推 100 像素
+            const offsetPos = calculateOffset(pos.x, pos.y);
+            ctx.beginPath();
+            ctx.moveTo(offsetPos.x, offsetPos.y);
+        }
+
+        function handleMove(e) {
+            const pos = getPos(e);
+            
+            // 偵測下滑顯現按鈕
+            if (!drawing && pos.rawY - lastY > 30) {
+                btn.classList.add('active');
             }
 
-            // 1. 計算手指距離中心的距離
-            const deltaX = clientX - centerX;
-            const deltaY = clientY - centerY;
+            if (!drawing) return;
 
-            // 2. 將距離反轉 (Mirror effect)，決定線條位置
-            // 如果你想線條在同側出現但偏移，把這裡的 "-" 去掉即可
+            // 核心偏移邏輯：
+            // 手指在中心畫，我們把線條座標強制加/減去畫布寬度的一半以上
+            // 讓線條直接跳過白區，出現在灰邊
+            const offsetPos = calculateOffset(pos.x, pos.y);
+            
+            ctx.lineTo(offsetPos.x, offsetPos.y);
+            ctx.stroke();
+        }
+
+        function calculateOffset(x, y) {
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            const dist = 0.45; // 偏移係數
+
+            // 將筆跡從中心向外推擠
+            const dx = x - cx;
+            const dy = y - cy;
+            
+            // 如果你在左半邊畫，線條就往更左邊推；右半邊同理
             return {
-                x: centerX - deltaX,
-                y: centerY - deltaY
+                x: x + (dx > 0 ? 100 : -100), 
+                y: y + (dy > 0 ? 100 : -100)
             };
         }
 
-        function startDrawing(e) {
-            isDrawing = true;
-            const pos = getOffsetPos(e);
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
-            
-            // 用於偵測是否要往下滑
-            if (e.touches) startY = e.touches[0].clientY; 
+        function getPos(e) {
+            const t = e.touches ? e.touches[0] : e;
+            return { x: t.clientX, y: t.clientY, rawY: t.clientY };
         }
 
-        function draw(e) {
-            // 處理重新開始按鈕的顯示/隱藏
-            if (e.touches) {
-                const currentY = e.touches[0].clientY;
-                // 如果在作畫區域外往下滑動，且未在作畫，顯示按鈕
-                if (!isDrawing && currentY - startY > 50) { 
-                    resetBtn.classList.add('show');
-                }
-            }
+        function stop() {
+            drawing = false;
+        }
 
-            if (!isDrawing) return;
-            if (e.cancelable) e.preventDefault(); 
+        function clearAll() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            btn.classList.remove('active');
+        }
 
-            // 限制只有在白色區域內觸摸才會有線條
-            const target
+        touchArea.addEventListener('touchstart', handleStart);
+        window.addEventListener('touchmove', handleMove, {passive:false});
+        window.addEventListener('touchend', stop);
+        
+        touchArea.addEventListener('mousedown', handleStart);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', stop);
+
+        window.addEventListener('resize', init);
+        init();
+    </script>
+</body>
+</html>
