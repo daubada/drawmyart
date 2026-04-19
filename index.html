@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Edge Drawing - 邊緣練習</title>
+    <style>
+        /* 基礎設定：禁止頁面縮放與預設滾動 */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+            background-color: #333; /* 背景深灰 */
+            font-family: sans-serif;
+        }
+
+        /* 背景畫布：填滿整個螢幕 */
+        #bgCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            display: block;
+        }
+
+        /* 內容容器：用來創造「往下滑」的空間 */
+        .scroll-container {
+            position: relative;
+            z-index: 2;
+            height: 150vh; /* 讓頁面比螢幕高，才能產生滑動感 */
+        }
+
+        /* 中央白色畫布感應區 */
+        .drawing-zone {
+            position: sticky;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70vw;
+            height: 70vw;
+            background-color: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto; /* 確保能接收觸摸 */
+        }
+
+        /* 提示文字 */
+        .hint {
+            color: #999;
+            font-size: 0.8rem;
+            pointer-events: none;
+        }
+
+        /* 底部控制區 */
+        .controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 50vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(transparent, #222);
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            background: #fff;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="bgCanvas"></canvas>
+
+    <div class="scroll-container">
+        <div class="drawing-zone" id="touchZone">
+            <span class="hint">請在此處作畫</span>
+        </div>
+
+        <div class="controls">
+            <button onclick="resetCanvas()">重新開始</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('bgCanvas');
+        const ctx = canvas.getContext('2d');
+        const touchZone = document.getElementById('touchZone');
+
+        let isDrawing = false;
+
+        // 初始化畫布大小
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.strokeStyle = '#ffffff'; // 線條顏色為白色，在灰底上顯眼
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+        }
+
+        // 取得座標並繪製
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            // 處理手機觸控或滑鼠
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            // 阻止預設的滾動行為，讓作畫時頁面不動
+            if(e.touches) e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const pos = getPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            if(e.touches) e.preventDefault();
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function resetCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 回到頂部
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 事件監聽：只在 touchZone (白色框) 上開始偵測
+        touchZone.addEventListener('touchstart', startDrawing, { passive: false });
+        window.addEventListener('touchmove', draw, { passive: false });
+        window.addEventListener('touchend', stopDrawing);
+
+        // 同時支援滑鼠（方便你在電腦測試）
+        touchZone.addEventListener('mousedown', startDrawing);
+        window.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stopDrawing);
+
+        window.addEventListener('resize', initCanvas);
+        initCanvas();
+    </script>
+</body>
+</html>
