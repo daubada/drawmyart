@@ -3,160 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Edge Only Drawing</title>
+    <title>Edge Drawing - 修正版</title>
     <style>
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #1a1a1a; /* 深灰背景 */
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            background-color: #222; /* 灰底 */
             overflow: hidden;
-            touch-action: none;
+            font-family: sans-serif;
+            touch-action: none; /* 禁用瀏覽器手勢，確保能順利畫圖 */
         }
 
-        /* 畫布：放在最底層 */
-        #bgCanvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 1;
-        }
-
-        /* 白色畫布：放在畫布上方，遮住中間的線條 */
-        .white-plate {
+        /* 底部：純粹的視覺方塊 */
+        .visual-center {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 85vmin; /* 稍微縮小一點點，讓灰邊明顯一點 */
-            height: 85vmin;
+            width: 80vmin; height: 80vmin;
             background-color: white;
-            z-index: 5; /* 確保在線條上方 */
-            box-shadow: 0 0 50px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            z-index: 1;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        .hint {
-            color: #eee;
-            font-size: 0.7rem;
-            letter-spacing: 5px;
-            pointer-events: none;
+        /* 頂層：透明的畫布，負責接收所有點擊與繪圖 */
+        #mainCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 10;
+            cursor: crosshair;
         }
 
-        /* 按鈕區 */
+        /* 按鈕：層級必須最高 */
         #resetBtn {
             position: fixed;
-            bottom: -100px;
-            left: 50%;
+            bottom: -80px; left: 50%;
             transform: translateX(-50%);
-            z-index: 10;
-            padding: 12px 24px;
+            z-index: 100;
+            padding: 15px 30px;
             background: white;
             border: none;
-            border-radius: 2px;
-            transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border-radius: 5px;
+            transition: 0.3s;
         }
 
-        #resetBtn.active {
-            bottom: 40px;
-        }
+        #resetBtn.show { bottom: 40px; }
     </style>
 </head>
 <body>
 
-    <canvas id="bgCanvas"></canvas>
-    
-    <div class="white-plate" id="touchArea">
-        </div>
-
-    <button id="resetBtn" onclick="clearAll()">RESET</button>
+    <div class="visual-center"></div>
+    <canvas id="mainCanvas"></canvas>
+    <button id="resetBtn" onclick="resetCanvas()">重新開始 / RESET</button>
 
     <script>
-        const canvas = document.getElementById('bgCanvas');
+        const canvas = document.getElementById('mainCanvas');
         const ctx = canvas.getContext('2d');
-        const touchArea = document.getElementById('touchArea');
-        const btn = document.getElementById('resetBtn');
+        const resetBtn = document.getElementById('resetBtn');
 
         let drawing = false;
-        let lastY = 0;
+        let lastScrollY = 0;
 
         function init() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            ctx.strokeStyle = '#ffffff';
+            ctx.strokeStyle = '#ffffff'; // 線條顏色
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
         }
 
-        function handleStart(e) {
+        // 判斷座標是否在「白區」之外
+        function isOutside(x, y) {
+            const size = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+            const left = (window.innerWidth - size) / 2;
+            const right = left + size;
+            const top = (window.innerHeight - size) / 2;
+            const bottom = top + size;
+            
+            // 如果座標不在白框範圍內，回傳 true
+            return (x < left || x > right || y < top || y > bottom);
+        }
+
+        function start(e) {
             drawing = true;
             const pos = getPos(e);
-            lastY = pos.rawY;
-            // 計算偏移：將座標往外推 100 像素
-            const offsetPos = calculateOffset(pos.x, pos.y);
+            lastScrollY = pos.y;
             ctx.beginPath();
-            ctx.moveTo(offsetPos.x, offsetPos.y);
+            ctx.moveTo(pos.x, pos.y);
         }
 
-        function handleMove(e) {
+        function move(e) {
             const pos = getPos(e);
-            
-            // 偵測下滑顯現按鈕
-            if (!drawing && pos.rawY - lastY > 30) {
-                btn.classList.add('active');
+
+            // 處理「下滑出現按鈕」：在非繪圖狀態下偵測
+            if (!drawing && pos.y - lastScrollY > 50) {
+                resetBtn.classList.add('show');
             }
 
             if (!drawing) return;
 
-            // 核心偏移邏輯：
-            // 手指在中心畫，我們把線條座標強制加/減去畫布寬度的一半以上
-            // 讓線條直接跳過白區，出現在灰邊
-            const offsetPos = calculateOffset(pos.x, pos.y);
-            
-            ctx.lineTo(offsetPos.x, offsetPos.y);
-            ctx.stroke();
-        }
-
-        function calculateOffset(x, y) {
-            const cx = window.innerWidth / 2;
-            const cy = window.innerHeight / 2;
-            const dist = 0.45; // 偏移係數
-
-            // 將筆跡從中心向外推擠
-            const dx = x - cx;
-            const dy = y - cy;
-            
-            // 如果你在左半邊畫，線條就往更左邊推；右半邊同理
-            return {
-                x: x + (dx > 0 ? 100 : -100), 
-                y: y + (dy > 0 ? 100 : -100)
-            };
-        }
-
-        function getPos(e) {
-            const t = e.touches ? e.touches[0] : e;
-            return { x: t.clientX, y: t.clientY, rawY: t.clientY };
+            // 關鍵邏輯：只有在座標屬於「外部灰色地帶」時才執行繪製線條
+            // 當手指在白區內時，moveTo 會更新座標但不畫線，直到手指移出去
+            if (isOutside(pos.x, pos.y)) {
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            } else {
+                ctx.moveTo(pos.x, pos.y);
+            }
         }
 
         function stop() {
             drawing = false;
         }
 
-        function clearAll() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            btn.classList.remove('active');
+        function getPos(e) {
+            const t = e.touches ? e.touches[0] : e;
+            return { x: t.clientX, y: t.clientY };
         }
 
-        touchArea.addEventListener('touchstart', handleStart);
-        window.addEventListener('touchmove', handleMove, {passive:false});
-        window.addEventListener('touchend', stop);
-        
-        touchArea.addEventListener('mousedown', handleStart);
-        window.addEventListener('mousemove', handleMove);
+        function resetCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            resetBtn.classList.remove('show');
+        }
+
+        // 監聽畫布事件
+        canvas.addEventListener('mousedown', start);
+        window.addEventListener('mousemove', move);
         window.addEventListener('mouseup', stop);
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // 徹底防止 Chrome 的下拉刷新
+            start(e);
+        }, { passive: false });
+        
+        window.addEventListener('touchmove', (e) => {
+            if (drawing) e.preventDefault();
+            move(e);
+        }, { passive: false });
+        
+        window.addEventListener('touchend', stop);
 
         window.addEventListener('resize', init);
         init();
